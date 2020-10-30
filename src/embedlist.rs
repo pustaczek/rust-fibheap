@@ -46,6 +46,21 @@ impl<T: EmbeddedListElem> EmbedList<T> {
 		self.child.as_ref().map(|root| unsafe { root.as_ref() })
 	}
 
+	pub fn extract_root(&mut self) -> Option<NonNull<T>> {
+		let mut root = self.child?;
+		let mut leftmost = *unsafe { root.as_mut() }.left_mut();
+		let mut rightmost = *unsafe { root.as_mut() }.right_mut();
+		if leftmost != root {
+			*unsafe { leftmost.as_mut() }.right_mut() = rightmost;
+			*unsafe { rightmost.as_mut() }.left_mut() = leftmost;
+			unsafe { root.as_mut().embedlist_initalize() };
+			self.child = Some(leftmost);
+		} else {
+			self.child = None;
+		}
+		Some(root)
+	}
+
 	pub fn drop_custom(&mut self, mut f: impl FnMut(NonNull<T>)) {
 		let first_node = match self.child {
 			Some(child) => child,

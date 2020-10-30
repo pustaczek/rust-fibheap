@@ -28,9 +28,51 @@ impl FibHeap {
 
 	pub fn insert(&mut self, key: i32) {
 		let node = Node::new(key);
+		self.insert_node(node);
+		self.len += 1;
+	}
+
+	fn insert_node(&mut self, mut node: NonNull<Node>) {
+		let key = unsafe { node.as_mut() }.key;
 		let is_smaller = self.trees.root().map_or(false, |root| root.key > key);
 		self.trees.insert(node, is_smaller);
-		self.len += 1;
+	}
+
+	pub fn pop_min(&mut self) -> Option<i32> {
+		let mut root = unsafe { Box::from_raw(self.trees.extract_root()?.as_ptr()) };
+		while let Some(kid) = root.children.extract_root() {
+			self.trees.insert(kid, false);
+		}
+		self.consolidate();
+		self.len -= 1;
+		Some(root.key)
+	}
+
+	fn consolidate(&mut self) {
+		let mut uniques: [Option<NonNull<Node>>; 10] = [None; 10];
+		while let Some(mut node) = self.trees.extract_root() {
+			let mut degree = unsafe { node.as_mut() }.degree;
+			while let Some(mut other) = uniques[degree].take() {
+				if unsafe { node.as_mut() }.key > unsafe { other.as_mut() }.key {
+					std::mem::swap(&mut node, &mut other);
+				}
+				self.link(node, other);
+				degree += 1;
+			}
+			uniques[degree] = Some(node);
+		}
+		for unique in &mut uniques {
+			if let Some(node) = unique.take() {
+				self.insert_node(node);
+			}
+		}
+	}
+
+	fn link(&mut self, mut upper: NonNull<Node>, mut lower: NonNull<Node>) {
+		unsafe { lower.as_mut() }.parent = Some(upper);
+		unsafe { lower.as_mut() }.mark = false;
+		unsafe { upper.as_mut() }.degree += 1;
+		unsafe { upper.as_mut() }.children.insert(lower, false);
 	}
 }
 
@@ -71,9 +113,19 @@ unsafe impl embedlist::EmbeddedListElem for Node {
 }
 
 #[test]
-fn basic() {
+fn single_element() {
 	let mut heap = FibHeap::new();
 	heap.insert(1);
+	assert_eq!(heap.pop_min(), Some(1));
+	assert_eq!(heap.pop_min(), None);
+}
+
+#[test]
+fn two_elements() {
+	let mut heap = FibHeap::new();
 	heap.insert(2);
-	heap.insert(3);
+	heap.insert(1);
+	assert_eq!(heap.pop_min(), Some(1));
+	assert_eq!(heap.pop_min(), Some(2));
+	assert_eq!(heap.pop_min(), None);
 }
