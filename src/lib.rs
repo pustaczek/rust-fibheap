@@ -129,3 +129,17 @@ fn two_elements() {
 	assert_eq!(heap.pop_min(), Some(2));
 	assert_eq!(heap.pop_min(), None);
 }
+
+#[test]
+fn insert_and_pop_four() {
+	let mut heap = FibHeap::new();
+	heap.insert(0);
+	heap.insert(0);
+	heap.insert(0);
+	heap.insert(0);
+	assert_eq!(heap.pop_min(), Some(0));
+	assert_eq!(heap.pop_min(), Some(0));
+	assert_eq!(heap.pop_min(), Some(0));
+	assert_eq!(heap.pop_min(), Some(0));
+	assert_eq!(heap.pop_min(), None);
+}

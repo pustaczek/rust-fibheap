@@ -35,7 +35,7 @@ impl<T: EmbeddedListElem> EmbedList<T> {
 				return;
 			},
 		};
-		let mut rightmost = *unsafe { leftmost.as_mut() }.right_mut();
+		let mut rightmost = *unsafe { leftmost.as_mut() }.left_mut();
 		*unsafe { value.as_mut() }.left_mut() = rightmost;
 		*unsafe { value.as_mut() }.right_mut() = leftmost;
 		*unsafe { leftmost.as_mut() }.left_mut() = value;
