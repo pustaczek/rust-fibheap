@@ -1,9 +1,9 @@
 #![feature(unsafe_block_in_unsafe_fn)]
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-mod embedlist;
+mod intrusive_list;
 
-use crate::embedlist::IntrusiveList;
+use crate::intrusive_list::{IntrusiveList, IntrusiveListElem};
 use std::ptr::NonNull;
 
 pub struct FibHeap {
@@ -122,12 +122,12 @@ impl Node {
 			mark: false,
 			degree: 0,
 		});
-		embedlist::initialize_elem(&mut *node);
+		intrusive_list::initialize_elem(&mut *node);
 		NonNull::from(Box::leak(node))
 	}
 }
 
-unsafe impl embedlist::IntrusiveListElem for Node {
+unsafe impl IntrusiveListElem for Node {
 	fn left_mut(&mut self) -> &mut NonNull<Self> {
 		&mut self.left
 	}
@@ -137,50 +137,32 @@ unsafe impl embedlist::IntrusiveListElem for Node {
 	}
 }
 
-#[test]
-fn single_element() {
+#[cfg(test)]
+fn test_order(elements: &[i32], expected: &[i32]) {
 	let mut heap = FibHeap::new();
-	heap.insert(1);
-	assert_eq!(heap.pop_min(), Some(1));
-	assert_eq!(heap.pop_min(), None);
+	for element in elements {
+		heap.insert(*element);
+	}
+	let mut actual = Vec::new();
+	while let Some(element) = heap.pop_min() {
+		actual.push(element);
+	}
+	assert_eq!(actual, expected);
 }
 
 #[test]
-fn two_elements() {
-	let mut heap = FibHeap::new();
-	heap.insert(2);
-	heap.insert(1);
-	assert_eq!(heap.pop_min(), Some(1));
-	assert_eq!(heap.pop_min(), Some(2));
-	assert_eq!(heap.pop_min(), None);
+fn basic_one() {
+	test_order(&[1], &[1]);
 }
 
 #[test]
-fn insert_and_pop_four() {
-	let mut heap = FibHeap::new();
-	heap.insert(0);
-	heap.insert(0);
-	heap.insert(0);
-	heap.insert(0);
-	assert_eq!(heap.pop_min(), Some(0));
-	assert_eq!(heap.pop_min(), Some(0));
-	assert_eq!(heap.pop_min(), Some(0));
-	assert_eq!(heap.pop_min(), Some(0));
-	assert_eq!(heap.pop_min(), None);
+fn basic_two() {
+	test_order(&[1, 1], &[1, 1]);
+	test_order(&[1, 2], &[1, 2]);
+	test_order(&[2, 1], &[1, 2]);
 }
 
 #[test]
-fn merge_interleaving() {
-	let mut h1 = FibHeap::new();
-	let mut h2 = FibHeap::new();
-	h1.insert(1);
-	h1.insert(3);
-	h2.insert(2);
-	h2.insert(4);
-	let mut heap = FibHeap::merge(h1, h2);
-	assert_eq!(heap.pop_min(), Some(1));
-	assert_eq!(heap.pop_min(), Some(2));
-	assert_eq!(heap.pop_min(), Some(3));
-	assert_eq!(heap.pop_min(), Some(4));
-	assert_eq!(heap.pop_min(), None);
+fn basic_ten_equal() {
+	test_order(&[0; 10], &[0; 10]);
 }

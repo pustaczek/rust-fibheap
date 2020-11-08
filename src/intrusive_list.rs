@@ -9,6 +9,8 @@ pub struct IntrusiveList<T> {
 	root: Option<NonNull<T>>,
 }
 
+// TODO: This module is wildly unsafe (and not marked as such), try to figure out a better API.
+
 impl<T: IntrusiveListElem> IntrusiveList<T> {
 	pub fn new() -> Self {
 		IntrusiveList { root: None }
