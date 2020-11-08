@@ -1,68 +1,49 @@
 use std::ptr::NonNull;
 
-pub unsafe trait EmbeddedListElem {
+pub unsafe trait IntrusiveListElem {
 	fn left_mut(&mut self) -> &mut NonNull<Self>;
 	fn right_mut(&mut self) -> &mut NonNull<Self>;
-
-	fn embedlist_initalize(&mut self)
-	where Self: Sized {
-		*self.left_mut() = NonNull::new(self as *mut _).unwrap();
-		*self.right_mut() = NonNull::new(self as *mut _).unwrap();
-	}
 }
 
-pub struct EmbedList<T> {
-	child: Option<NonNull<T>>,
+pub struct IntrusiveList<T> {
+	root: Option<NonNull<T>>,
 }
 
-impl<T: EmbeddedListElem> EmbedList<T> {
+impl<T: IntrusiveListElem> IntrusiveList<T> {
 	pub fn new() -> Self {
-		EmbedList { child: None }
+		IntrusiveList { root: None }
 	}
 
-	pub fn insert(&mut self, node: NonNull<T>, as_root: bool) {
-		self.insert_anywhere(node);
-		if as_root {
-			self.child = Some(node);
-		}
+	fn singleton(node: NonNull<T>) -> Self {
+		IntrusiveList { root: Some(node) }
 	}
 
-	fn insert_anywhere(&mut self, mut value: NonNull<T>) {
-		let mut leftmost = match self.child {
-			Some(root) => root,
-			None => {
-				self.child = Some(value);
-				return;
-			},
-		};
-		let mut rightmost = *unsafe { leftmost.as_mut() }.left_mut();
-		*unsafe { value.as_mut() }.left_mut() = rightmost;
-		*unsafe { value.as_mut() }.right_mut() = leftmost;
-		*unsafe { leftmost.as_mut() }.left_mut() = value;
-		*unsafe { rightmost.as_mut() }.right_mut() = value;
+	pub fn insert(&mut self, node: NonNull<T>) {
+		let other = IntrusiveList::singleton(node);
+		self.merge(other);
 	}
 
 	pub fn root(&self) -> Option<&T> {
-		self.child.as_ref().map(|root| unsafe { root.as_ref() })
+		self.root.as_ref().map(|root| unsafe { root.as_ref() })
 	}
 
 	pub fn extract_root(&mut self) -> Option<NonNull<T>> {
-		let mut root = self.child?;
+		let mut root = self.root?;
 		let mut leftmost = *unsafe { root.as_mut() }.left_mut();
 		let mut rightmost = *unsafe { root.as_mut() }.right_mut();
 		if leftmost != root {
 			*unsafe { leftmost.as_mut() }.right_mut() = rightmost;
 			*unsafe { rightmost.as_mut() }.left_mut() = leftmost;
-			unsafe { root.as_mut().embedlist_initalize() };
-			self.child = Some(leftmost);
+			initialize_elem(unsafe { root.as_mut() });
+			self.root = Some(leftmost);
 		} else {
-			self.child = None;
+			self.root = None;
 		}
 		Some(root)
 	}
 
 	pub fn drop_custom(&mut self, mut f: impl FnMut(NonNull<T>)) {
-		let first_node = match self.child {
+		let first_node = match self.root {
 			Some(child) => child,
 			None => return,
 		};
@@ -77,28 +58,33 @@ impl<T: EmbeddedListElem> EmbedList<T> {
 			node = next_node;
 		}
 
-		self.child = None;
+		self.root = None;
 	}
 
-	pub fn merge(lhs: Self, rhs: Self) -> Self {
-		let child = match (lhs.child, rhs.child) {
-			(Some(mut lhs_rightmost), Some(mut rhs_leftmost)) => {
-				let mut lhs_leftmost = *unsafe { lhs_rightmost.as_mut() }.right_mut();
-				let mut rhs_rightmost = *unsafe { rhs_leftmost.as_mut() }.left_mut();
-				*unsafe { lhs_rightmost.as_mut() }.right_mut() = rhs_leftmost;
-				*unsafe { lhs_leftmost.as_mut() }.left_mut() = rhs_rightmost;
-				*unsafe { rhs_leftmost.as_mut() }.left_mut() = lhs_rightmost;
-				*unsafe { rhs_rightmost.as_mut() }.right_mut() = lhs_leftmost;
-				Some(lhs_leftmost)
+	pub fn merge(&mut self, other: Self) {
+		let root = match (self.root, other.root) {
+			(Some(mut self_rightmost), Some(mut other_leftmost)) => {
+				let mut self_leftmost = *unsafe { self_rightmost.as_mut() }.right_mut();
+				let mut other_rightmost = *unsafe { other_leftmost.as_mut() }.left_mut();
+				*unsafe { self_rightmost.as_mut() }.right_mut() = other_leftmost;
+				*unsafe { self_leftmost.as_mut() }.left_mut() = other_rightmost;
+				*unsafe { other_leftmost.as_mut() }.left_mut() = self_rightmost;
+				*unsafe { other_rightmost.as_mut() }.right_mut() = self_leftmost;
+				Some(self_rightmost)
 			},
 			(Some(only), None) | (None, Some(only)) => Some(only),
 			(None, None) => None,
 		};
-		EmbedList { child }
+		self.root = root;
 	}
 
 	pub fn set_root(&mut self, root: NonNull<T>) {
-		debug_assert!(self.child.is_some());
-		self.child = Some(root);
+		debug_assert!(self.root.is_some());
+		self.root = Some(root);
 	}
+}
+
+pub fn initialize_elem<T: IntrusiveListElem>(elem: &mut T) {
+	*elem.left_mut() = NonNull::from(elem as &mut _);
+	*elem.right_mut() = NonNull::from(elem as &mut _);
 }

@@ -3,17 +3,17 @@
 
 mod embedlist;
 
-use crate::embedlist::{EmbedList, EmbeddedListElem};
+use crate::embedlist::IntrusiveList;
 use std::ptr::NonNull;
 
 pub struct FibHeap {
-	trees: EmbedList<Node>,
+	trees: IntrusiveList<Node>,
 	len: usize,
 }
 
 struct Node {
 	parent: Option<NonNull<Node>>,
-	children: EmbedList<Node>,
+	children: IntrusiveList<Node>,
 	left: NonNull<Node>,
 	right: NonNull<Node>,
 	key: i32,
@@ -23,7 +23,7 @@ struct Node {
 
 impl FibHeap {
 	pub fn new() -> FibHeap {
-		FibHeap { trees: EmbedList::new(), len: 0 }
+		FibHeap { trees: IntrusiveList::new(), len: 0 }
 	}
 
 	pub fn insert(&mut self, key: i32) {
@@ -35,13 +35,16 @@ impl FibHeap {
 	fn insert_node(&mut self, mut node: NonNull<Node>) {
 		let key = unsafe { node.as_mut() }.key;
 		let is_smaller = self.trees.root().map_or(false, |root| root.key > key);
-		self.trees.insert(node, is_smaller);
+		self.trees.insert(node);
+		if is_smaller {
+			self.trees.set_root(node);
+		}
 	}
 
 	pub fn pop_min(&mut self) -> Option<i32> {
 		let mut root = unsafe { Box::from_raw(self.trees.extract_root()?.as_ptr()) };
 		while let Some(kid) = root.children.extract_root() {
-			self.trees.insert(kid, false);
+			self.trees.insert(kid);
 		}
 		self.consolidate();
 		self.len -= 1;
@@ -72,7 +75,7 @@ impl FibHeap {
 		unsafe { lower.as_mut() }.parent = Some(upper);
 		unsafe { lower.as_mut() }.mark = false;
 		unsafe { upper.as_mut() }.degree += 1;
-		unsafe { upper.as_mut() }.children.insert(lower, false);
+		unsafe { upper.as_mut() }.children.insert(lower);
 	}
 
 	pub fn merge(mut lhs: FibHeap, mut rhs: FibHeap) -> FibHeap {
@@ -83,10 +86,8 @@ impl FibHeap {
 		};
 		let new_min = new_min.map(NonNull::from);
 		let len = lhs.len + rhs.len;
-		let mut trees = EmbedList::merge(
-			std::mem::replace(&mut lhs.trees, EmbedList::new()),
-			std::mem::replace(&mut rhs.trees, EmbedList::new()),
-		);
+		lhs.trees.merge(std::mem::replace(&mut rhs.trees, IntrusiveList::new()));
+		let mut trees = std::mem::replace(&mut lhs.trees, IntrusiveList::new());
 		if let Some(new_min) = new_min {
 			trees.set_root(new_min);
 		}
@@ -114,19 +115,19 @@ impl Node {
 	fn new(key: i32) -> NonNull<Node> {
 		let mut node = Box::new(Node {
 			parent: None,
-			children: EmbedList::new(),
+			children: IntrusiveList::new(),
 			left: NonNull::dangling(),
 			right: NonNull::dangling(),
 			key,
 			mark: false,
 			degree: 0,
 		});
-		node.embedlist_initalize();
+		embedlist::initialize_elem(&mut *node);
 		NonNull::from(Box::leak(node))
 	}
 }
 
-unsafe impl embedlist::EmbeddedListElem for Node {
+unsafe impl embedlist::IntrusiveListElem for Node {
 	fn left_mut(&mut self) -> &mut NonNull<Self> {
 		&mut self.left
 	}
