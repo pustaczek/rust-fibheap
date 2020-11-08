@@ -4,7 +4,7 @@ pub unsafe trait EmbeddedListElem {
 	fn left_mut(&mut self) -> &mut NonNull<Self>;
 	fn right_mut(&mut self) -> &mut NonNull<Self>;
 
-	unsafe fn embedlist_initalize(&mut self)
+	fn embedlist_initalize(&mut self)
 	where Self: Sized {
 		*self.left_mut() = NonNull::new(self as *mut _).unwrap();
 		*self.right_mut() = NonNull::new(self as *mut _).unwrap();
@@ -78,5 +78,27 @@ impl<T: EmbeddedListElem> EmbedList<T> {
 		}
 
 		self.child = None;
+	}
+
+	pub fn merge(lhs: Self, rhs: Self) -> Self {
+		let child = match (lhs.child, rhs.child) {
+			(Some(mut lhs_rightmost), Some(mut rhs_leftmost)) => {
+				let mut lhs_leftmost = *unsafe { lhs_rightmost.as_mut() }.right_mut();
+				let mut rhs_rightmost = *unsafe { rhs_leftmost.as_mut() }.left_mut();
+				*unsafe { lhs_rightmost.as_mut() }.right_mut() = rhs_leftmost;
+				*unsafe { lhs_leftmost.as_mut() }.left_mut() = rhs_rightmost;
+				*unsafe { rhs_leftmost.as_mut() }.left_mut() = lhs_rightmost;
+				*unsafe { rhs_rightmost.as_mut() }.right_mut() = lhs_leftmost;
+				Some(lhs_leftmost)
+			},
+			(Some(only), None) | (None, Some(only)) => Some(only),
+			(None, None) => None,
+		};
+		EmbedList { child }
+	}
+
+	pub fn set_root(&mut self, root: NonNull<T>) {
+		debug_assert!(self.child.is_some());
+		self.child = Some(root);
 	}
 }

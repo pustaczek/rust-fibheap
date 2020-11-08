@@ -17,6 +17,7 @@ impl<T: Ord+PartialOrd> Ord for Reverse<T> {
 }
 
 #[quickcheck]
+#[cfg_attr(miri, ignore)]
 fn as_many_popped_as_inserted(xs: Vec<i32>) {
 	let mut heap = FibHeap::new();
 	for x in &xs {
@@ -30,6 +31,7 @@ fn as_many_popped_as_inserted(xs: Vec<i32>) {
 }
 
 #[quickcheck]
+#[cfg_attr(miri, ignore)]
 fn good_order(xs: Vec<i32>) {
 	let mut h1 = FibHeap::new();
 	let mut h2 = std::collections::BinaryHeap::new();

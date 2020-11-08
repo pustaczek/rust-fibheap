@@ -74,6 +74,30 @@ impl FibHeap {
 		unsafe { upper.as_mut() }.degree += 1;
 		unsafe { upper.as_mut() }.children.insert(lower, false);
 	}
+
+	pub fn merge(mut lhs: FibHeap, mut rhs: FibHeap) -> FibHeap {
+		let new_min = match (lhs.trees.root(), rhs.trees.root()) {
+			(Some(left), Some(right)) => Some(if left.key <= right.key { left } else { right }),
+			(Some(only), None) | (None, Some(only)) => Some(only),
+			(None, None) => None,
+		};
+		let new_min = new_min.map(NonNull::from);
+		let len = lhs.len + rhs.len;
+		let mut trees = EmbedList::merge(
+			std::mem::replace(&mut lhs.trees, EmbedList::new()),
+			std::mem::replace(&mut rhs.trees, EmbedList::new()),
+		);
+		if let Some(new_min) = new_min {
+			trees.set_root(new_min);
+		}
+		FibHeap { trees, len }
+	}
+}
+
+impl Default for FibHeap {
+	fn default() -> Self {
+		FibHeap::new()
+	}
 }
 
 impl Drop for FibHeap {
@@ -97,8 +121,8 @@ impl Node {
 			mark: false,
 			degree: 0,
 		});
-		unsafe { node.embedlist_initalize() }
-		NonNull::new(Box::into_raw(node)).unwrap()
+		node.embedlist_initalize();
+		NonNull::from(Box::leak(node))
 	}
 }
 
@@ -141,5 +165,21 @@ fn insert_and_pop_four() {
 	assert_eq!(heap.pop_min(), Some(0));
 	assert_eq!(heap.pop_min(), Some(0));
 	assert_eq!(heap.pop_min(), Some(0));
+	assert_eq!(heap.pop_min(), None);
+}
+
+#[test]
+fn merge_interleaving() {
+	let mut h1 = FibHeap::new();
+	let mut h2 = FibHeap::new();
+	h1.insert(1);
+	h1.insert(3);
+	h2.insert(2);
+	h2.insert(4);
+	let mut heap = FibHeap::merge(h1, h2);
+	assert_eq!(heap.pop_min(), Some(1));
+	assert_eq!(heap.pop_min(), Some(2));
+	assert_eq!(heap.pop_min(), Some(3));
+	assert_eq!(heap.pop_min(), Some(4));
 	assert_eq!(heap.pop_min(), None);
 }
